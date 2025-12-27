@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>GEO FLOW Dashboard</title>
+  <link rel="stylesheet" href="/static/dashboard.css" />
+</head>
+<body>
+
+<header>
+  <h1>🌍 GEO FLOW</h1>
+  <p>Real-time browsing data exposure intelligence</p>
+
+  <!-- Stats + Privacy Score -->
+  <div class="stats">
+    <div>
+      <span id="total">0</span>
+      <label>Total Events</label>
+    </div>
+
+    <div>
+      <span id="countries">0</span>
+      <label>Countries</label>
+    </div>
+
+    <div>
+      <span id="trackers">0</span>
+      <label>Trackers</label>
+    </div>
+
+    <!-- 🔥 Upgrade 1: Privacy Score -->
+    <div class="score-box">
+      Privacy Score
+      <span id="privacyScore">--</span>/100
+    </div>
+  </div>
+</header>
+
+<main>
+
+  <!-- 🔥 Upgrade 4: Export -->
+  <button class="export-btn" onclick="exportReport()">
+    Export Privacy Report
+  </button>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Domain</th>
+        <th>Type</th>
+        <th>Risk</th>
+        <th>Country</th>
+        <th>City</th>
+        <th>Organization</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+
+    <tbody id="rows"></tbody>
+  </table>
+</main>
+
+<script src="/static/dashboard.js"></script>
+</body>
+</html>
