@@ -1,36 +1,44 @@
 # api.py
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from typing import List
+from datetime import datetime
+
 import dns.resolver
 import requests
-from typing import List
 
-app = FastAPI()
+app = FastAPI(title="GeoFlow Backend")
 
-# serve static files
+# -------------------------------
+# Static files (CSS / JS)
+# -------------------------------
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# in-memory storage
+# -------------------------------
+# In-memory storage
+# -------------------------------
 events: List[dict] = []
 
-# tracker classification
+# -------------------------------
+# Tracker classification
+# -------------------------------
 TRACKER_KEYWORDS = {
-    "ads": ["doubleclick", "adservice", "adsystem", "criteo"],
+    "ads": ["doubleclick", "adservice", "adsystem"],
     "analytics": ["analytics", "google-analytics", "gtag"],
     "cdn": ["cloudflare", "akamai", "fastly"]
 }
 
 # -------------------------------
-# Helpers
+# Utils
 # -------------------------------
-
 def resolve_ip(domain: str):
     try:
         return dns.resolver.resolve(domain, "A")[0].to_text()
     except:
         return None
+
 
 def geo_lookup(ip: str):
     if not ip:
@@ -45,48 +53,53 @@ def geo_lookup(ip: str):
         pass
     return {}
 
-def calculate_risk(category: str, country: str):
-    score = 0
 
+def calculate_risk(category: str):
     if category == "ads":
-        score += 3
-    elif category == "analytics":
-        score += 2
-    elif category == "cdn":
-        score += 1
-
-    if country != "India":
-        score += 1
-
-    if score >= 4:
         return "HIGH"
-    elif score >= 2:
+    if category == "analytics":
         return "MEDIUM"
-    else:
-        return "LOW"
+    return "LOW"
+
 
 def calculate_site_privacy_score(events):
     score = 100
     for e in events:
-        if e.get("risk") == "HIGH":
+        if e["risk"] == "HIGH":
             score -= 10
-        elif e.get("risk") == "MEDIUM":
+        elif e["risk"] == "MEDIUM":
             score -= 5
     return max(score, 0)
 
 # -------------------------------
-# Routes
+# ROUTES
 # -------------------------------
 
+# 🔹 Landing Page (Friend UI)
+@app.get("/")
+def landing_page():
+    return FileResponse("templates/landing.html")
+
+
+# 🔹 Dashboard Page (Your UI)
+@app.get("/dashboard")
+def dashboard():
+    return FileResponse("templates/dashboard.html")
+
+
+# 🔹 Track endpoint (used by extension / demo)
 @app.post("/track")
 def track(payload: dict):
     page = payload.get("page")
     resources = payload.get("resources", [])
-    timestamp = payload.get("timestamp")
+    timestamp = payload.get("timestamp", datetime.utcnow().isoformat())
 
     domains = set([page] + resources)
 
     for domain in domains:
+        if not domain:
+            continue
+
         ip = resolve_ip(domain)
         geo = geo_lookup(ip)
 
@@ -95,7 +108,7 @@ def track(payload: dict):
             if any(k in domain for k in keys):
                 category = cat
 
-        risk = calculate_risk(category, geo.get("country", "Unknown"))
+        risk = calculate_risk(category)
 
         events.append({
             "domain": domain,
@@ -109,20 +122,16 @@ def track(payload: dict):
 
     return {"status": "ok"}
 
+
+# 🔹 Dashboard data
 @app.get("/events")
 def get_events():
     return events
 
+
+# 🔹 Privacy score
 @app.get("/privacy-score")
 def privacy_score():
     return {
         "score": calculate_site_privacy_score(events)
     }
-
-@app.get("/export")
-def export_data():
-    return JSONResponse(content=events)
-
-@app.get("/dashboard")
-def dashboard():
-    return FileResponse("templates/dashboard.html")

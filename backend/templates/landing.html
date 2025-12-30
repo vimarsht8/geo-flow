@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GeoFlow - Mapping Global Data Flows</title>
+    
+    <!-- Scripts -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/framer-motion@10.16.4/dist/framer-motion.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cobe"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #050505;
+            color: #e0e0e0;
+            margin: 0;
+            overflow-x: hidden;
+        }
+
+        .selection-cyan::selection {
+            background-color: rgba(0, 163, 196, 0.3);
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #121212;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #444;
+        }
+
+        /* Fix for potential black screen - ensure root has height */
+        #root {
+            min-height: 100vh;
+        }
+    </style>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cyan: {
+                            500: '#00f2ff',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="selection-cyan bg-[#050505]">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        // In the UMD build, framer-motion is often exported as FramerMotion or Motion
+        const motion = window.FramerMotion ? window.FramerMotion.motion : (window.Motion ? window.Motion.motion : null);
+        const AnimatePresence = window.FramerMotion ? window.FramerMotion.AnimatePresence : (window.Motion ? window.Motion.AnimatePresence : null);
+
+        if (!motion) {
+            console.error("Framer Motion not found. Check CDN.");
+        }
+
+        // Lucide Icon Component Wrapper
+        const Icon = ({ name, className }) => {
+            const iconRef = useRef(null);
+            useEffect(() => {
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+            }, [name]);
+            return <i data-lucide={name} className={className}></i>;
+        };
+
+        const Globe = ({ isHero = false }) => {
+            const canvasRef = useRef(null);
+
+            useEffect(() => {
+                let phi = 0;
+                if (!canvasRef.current || !window.createGlobe) return;
+
+                const globe = window.createGlobe(canvasRef.current, {
+                    devicePixelRatio: 2,
+                    width: 1200,
+                    height: 1200,
+                    phi: 0,
+                    theta: 0.3,
+                    dark: 1,
+                    diffuse: isHero ? 1.4 : 1.2,
+                    mapSamples: 16000,
+                    mapBrightness: isHero ? 8 : 6,
+                    baseColor: [0.05, 0.15, 0.2],
+                    markerColor: [0.2, 0.8, 1],
+                    glowColor: [0.1, 0.5, 0.6],
+                    markers: [
+                        { location: [37.7595, -122.4367], size: 0.08 },
+                        { location: [40.7128, -74.006], size: 0.08 },
+                        { location: [51.5074, -0.1278], size: 0.06 },
+                        { location: [53.3498, -6.2603], size: 0.1 },
+                        { location: [35.6762, 139.6503], size: 0.06 },
+                        { location: [1.3521, 103.8198], size: 0.06 },
+                        { location: [-33.8688, 151.2093], size: 0.06 },
+                    ],
+                    onRender: (state) => {
+                        state.phi = phi;
+                        phi += isHero ? 0.008 : 0.004;
+                    },
+                });
+
+                return () => globe.destroy();
+            }, [isHero]);
+
+            return (
+                <canvas
+                    ref={canvasRef}
+                    style={{
+                        width: "600px",
+                        height: "600px",
+                        maxWidth: "100%",
+                        aspectRatio: "1",
+                    }}
+                />
+            );
+        };
+
+        const StarField = () => {
+            const [stars, setStars] = useState([]);
+
+            useEffect(() => {
+                const newStars = Array.from({ length: 200 }).map((_, i) => ({
+                    id: i,
+                    size: Math.random() * 2 + 0.5,
+                    left: Math.random() * 100,
+                    top: Math.random() * 100,
+                    delay: Math.random() * 5,
+                    duration: Math.random() * 3 + 2,
+                }));
+                setStars(newStars);
+            }, []);
+
+            return (
+                <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[#050505]">
+                    {stars.map((s) => (
+                        <motion.div
+                            key={s.id}
+                            className="absolute rounded-full bg-white"
+                            style={{
+                                width: s.size,
+                                height: s.size,
+                                left: `${s.left}%`,
+                                top: `${s.top}%`,
+                                boxShadow: s.size > 1.5 ? "0 0 10px rgba(255,255,255,0.8)" : "none",
+                            }}
+                            animate={{
+                                opacity: [0.2, 0.8, 0.2],
+                                scale: [1, 1.2, 1],
+                            }}
+                            transition={{
+                                duration: s.duration,
+                                repeat: Infinity,
+                                delay: s.delay,
+                                ease: "easeInOut",
+                            }}
+                        />
+                    ))}
+                </div>
+            );
+        };
+
+        function App() {
+            return (
+                <div className="min-h-screen bg-[#121212] text-[#e0e0e0] font-sans selection:bg-[#00a3c4]/30 relative overflow-x-hidden">
+                    <StarField />
+                    
+                    {/* Global Background Globe */}
+                    <div className="fixed inset-0 z-1 opacity-20 pointer-events-none flex items-center justify-center scale-[2] overflow-hidden">
+                        <Globe />
+                    </div>
+
+                    {/* Enhanced Technical Overlay */}
+                    <div 
+                        className="fixed inset-0 z-10 pointer-events-none opacity-[0.03]" 
+                        style={{
+                            backgroundImage: `linear-gradient(rgba(18,18,18,0) 50%, rgba(0,242,255,0.25) 50%), linear-gradient(90deg, rgba(18,18,18,0) 50%, rgba(0,242,255,0.25) 50%)`,
+                            backgroundSize: '4px 4px'
+                        }}
+                    />
+                    <div className="fixed inset-0 z-10 pointer-events-none opacity-25 bg-[radial-gradient(circle_at_30%_20%,transparent_0%,#121212_70%)]" />
+
+                    {/* Navigation */}
+                    <nav className="fixed top-0 w-full z-50 bg-[#121212]/85 backdrop-blur-xl border-b border-white/5">
+                        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-[#00f2ff] rounded-lg flex items-center justify-center shadow-lg shadow-[#00f2ff]/30">
+                                    <Icon name="globe" className="text-[#121212] w-6 h-6" />
+                                </div>
+                                <span className="text-2xl font-bold tracking-tight text-white uppercase">Geo Flow</span>
+                            </div>
+
+                            <div className="hidden md:flex items-center gap-8 text-sm font-medium text-white/70">
+                              <a href="/dashboard" className="hover:text-[#00f2ff] transition-all duration-300 hover:scale-105 font-semibold uppercase tracking-wider">Get Started</a>
+
+                                <a href="#" className="hover:text-[#00f2ff] transition-all duration-300 hover:scale-105 font-semibold uppercase tracking-wider">Location</a>
+                                <button className="bg-[#00f2ff] text-[#121212] hover:bg-white font-black rounded-full px-6 py-2.5 transition-all duration-300 hover:scale-105 shadow-lg shadow-[#00f2ff]/30 text-xs tracking-wider uppercase">
+                                    Add to Chrome Extension
+                                </button>
+                            </div>
+
+                            <button className="md:hidden text-white">
+                                <Icon name="menu" className="w-6 h-6" />
+                            </button>
+                        </div>
+                    </nav>
+
+                    <main className="pt-20">
+                        {/* Hero Section */}
+                        <section className="relative min-h-[90vh] flex items-center overflow-hidden px-6 z-20 max-w-7xl mx-auto">
+                            <div className="grid lg:grid-cols-2 gap-12 items-center w-full">
+                                <motion.div 
+                                    initial={{ opacity: 0, y: 40 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+                                    className="text-left"
+                                >
+                                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-[#00f2ff]/10 border border-[#00f2ff]/20 text-[#00f2ff] text-sm font-semibold tracking-wide uppercase mb-8 backdrop-blur-sm">
+                                        <Icon name="activity" className="w-4 h-4 animate-pulse" /> Live Data Flow Observability
+                                    </div>
+                                    <h1 className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tight text-white mb-6 leading-tight">
+                                        MAPPING GLOBAL <br />
+                                        <span className="bg-gradient-to-r from-[#00f2ff] via-[#0099ff] to-[#0066ff] bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(0,242,255,0.5)] uppercase">DATA FLOWS</span>
+                                    </h1>
+                                    <p className="text-lg md:text-xl text-white/70 max-w-xl mb-10 leading-relaxed">
+                                        <span className="text-[#00f2ff]/90 font-semibold">
+                                            GeoFlow reveals the invisible third-party infrastructure
+                                        </span>{" "}
+                                        behind every website showing which{" "}
+                                        <span className="text-[#00f2ff]/80 font-medium">organizations</span>{" "}
+                                        and{" "}
+                                        <span className="text-[#00f2ff]/80 font-medium">countries</span>{" "}
+                                        your browser silently connects to,{" "}
+                                        <span className="text-white/60">without ever inspecting your personal data.</span>
+                                    </p>
+                                    
+                                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                                        <button className="h-14 px-8 rounded-full bg-[#00f2ff] text-[#121212] text-base font-bold hover:bg-white transition-all duration-300 hover:scale-105 shadow-xl shadow-[#00f2ff]/30 hover:shadow-2xl hover:shadow-[#00f2ff]/40 uppercase tracking-tighter">
+                                            Add Chrome Extension
+                                        </button>
+                                        <button className="h-14 px-8 rounded-full border border-white/10 text-white hover:bg-white/5 text-base backdrop-blur-sm flex items-center gap-2 font-semibold transition-all duration-300 hover:scale-105 hover:border-[#00f2ff]/30 uppercase tracking-tighter">
+                                            Read GeoFlow <Icon name="chevron-right" className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                </motion.div>
+
+                                <motion.div 
+                                    initial={{ opacity: 0, scale: 0.8 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ duration: 1.5, delay: 0.2, ease: "easeOut" }}
+                                    className="relative flex justify-center items-center h-[500px] lg:h-[700px]"
+                                >
+                                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(0,242,255,0.15)_0%,transparent_70%)] blur-3xl animate-pulse" />
+                                    <div className="scale-75 lg:scale-90">
+                                        <Globe isHero={true} />
+                                    </div>
+                                    
+                                    {/* Animated connection lines (simplified SVG) */}
+                                    <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 800 800">
+                                        <defs>
+                                            <linearGradient id="line-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                                <stop offset="0%" stopColor="transparent" />
+                                                <stop offset="50%" stopColor="#00f2ff" />
+                                                <stop offset="100%" stopColor="transparent" />
+                                            </linearGradient>
+                                        </defs>
+                                        <motion.path
+                                            d="M400,400 L500,300"
+                                            stroke="rgba(0,242,255,0.3)"
+                                            strokeWidth="1"
+                                            fill="none"
+                                            initial={{ pathLength: 0, opacity: 0 }}
+                                            animate={{ pathLength: 1, opacity: 1 }}
+                                            transition={{ duration: 2, repeat: Infinity, repeatDelay: 1 }}
+                                        />
+                                        <motion.path
+                                            d="M400,400 L300,500"
+                                            stroke="rgba(0,242,255,0.3)"
+                                            strokeWidth="1"
+                                            fill="none"
+                                            initial={{ pathLength: 0, opacity: 0 }}
+                                            animate={{ pathLength: 1, opacity: 1 }}
+                                            transition={{ duration: 2, repeat: Infinity, repeatDelay: 1.5 }}
+                                        />
+                                        <motion.path
+                                            d="M400,400 L600,200"
+                                            stroke="url(#line-grad)"
+                                            strokeWidth="2"
+                                            fill="none"
+                                            strokeDasharray="10 10"
+                                            animate={{ strokeDashoffset: [-100, 0] }}
+                                            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                                        />
+                                    </svg>
+                                </motion.div>
+                            </div>
+                        </section>
+
+                        {/* Stats Section */}
+                        <div className="max-w-7xl mx-auto px-6 mt-32 mb-32 relative z-20">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch">
+                                {[
+                                    { icon: "map-pin", title: "Global Presence", desc: "Visualize server locations instantly", color: "text-[#00f2ff]" },
+                                    { icon: "database", title: "Org Resolver", desc: "Identify owners behind third-parties", color: "text-purple-400" },
+                                    { icon: "eye", title: "Awareness First", desc: "Transparency over silent blocking", color: "text-amber-400" }
+                                ].map((stat, i) => (
+                                    <motion.div
+                                        key={i}
+                                        initial={{ opacity: 0, y: 20 }}
+                                        whileInView={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: i * 0.1 }}
+                                        className="bg-[#121212]/85 backdrop-blur-xl border border-white/5 rounded-2xl p-10 hover:translate-y-[-5px] hover:shadow-[0_20px_40px_rgba(0,242,255,0.1)] transition-all group flex flex-col items-center text-center md:items-start md:text-left"
+                                    >
+                                        <div className="mb-6 flex items-center justify-center">
+                                            <Icon name={stat.icon} className={`${stat.color} w-8 h-8 group-hover:scale-110 transition-transform duration-300`} />
+                                        </div>
+                                        <h3 className="text-white font-black text-lg uppercase tracking-widest mb-3">{stat.title}</h3>
+                                        <p className="text-white/50 text-base leading-relaxed max-w-xs">{stat.desc}</p>
+                                    </motion.div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* The Problem Section */}
+                        <section className="py-20 px-6 relative z-20">
+                            <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-12 md:gap-20 items-center">
+                                <motion.div
+                                    initial={{ opacity: 0, x: -40 }}
+                                    whileInView={{ opacity: 1, x: 0 }}
+                                    viewport={{ once: true }}
+                                >
+                                    <h2 className="text-3xl md:text-4xl font-black mb-6 uppercase tracking-tight text-white">The Problem</h2>
+                                    <div className="space-y-4 text-white/70 text-base md:text-lg leading-relaxed">
+                                        <p>Users think they interact with <strong className="text-white font-semibold uppercase">only one website</strong>.</p>
+                                        <p>In reality, a single website silently contacts <strong className="text-white font-semibold uppercase">many third-party services</strong> that observe you across the web.</p>
+                                        <div className="pt-4">
+                                            <div className="inline-block px-6 py-3 rounded-xl bg-[#00f2ff]/10 border-l-4 border-[#00f2ff]">
+                                                <p className="text-[#00f2ff] italic font-medium">
+                                                    "You can't protect what you don't understand."
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </motion.div>
+                                <motion.div
+                                    initial={{ opacity: 0, x: 40 }}
+                                    whileInView={{ opacity: 1, x: 0 }}
+                                    viewport={{ once: true }}
+                                    className="bg-[#121212]/85 backdrop-blur-xl border border-white/5 rounded-2xl md:rounded-3xl p-8 md:p-10 hover:shadow-[0_20px_40px_rgba(0,242,255,0.1)] transition-all"
+                                >
+                                    <h3 className="text-xl font-black mb-6 flex items-center gap-3 uppercase tracking-tight text-white">
+                                        <Icon name="zap" className="text-[#00f2ff] w-5 h-5 animate-pulse" /> The GeoFlow Solution
+                                    </h3>
+                                    <ul className="space-y-4">
+                                        {[
+                                            "Expose third-party network activity",
+                                            "Identify patterns across sites",
+                                            "Visualize global data movement",
+                                            "Educational infrastructure awareness"
+                                        ].map((item, i) => (
+                                            <li key={i} className="flex items-start gap-3 text-white/80">
+                                                <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#00f2ff] shadow-[0_0_10px_rgba(0,242,255,0.8)]" />
+                                                <span className="text-sm md:text-base font-medium">{item}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </motion.div>
+                            </div>
+                        </section>
+
+                        {/* How GeoFlow Works */}
+                        <section className="py-20 px-6 relative z-20">
+                            <div className="max-w-5xl mx-auto text-center">
+                                <h2 className="text-3xl md:text-4xl font-black mb-8 md:mb-12 uppercase tracking-tight text-white">
+                                    HOW GEOFLOW WORKS
+                                </h2>
+
+                                <div className="grid md:grid-cols-3 gap-6 md:gap-10 text-left">
+                                    {[
+                                        { step: "01", title: "Observe Requests", desc: "When a website loads, GeoFlow passively observes the destination domains of background network requests — without reading content or user data." },
+                                        { step: "02", title: "Identify Third Parties", desc: "GeoFlow separates first-party website connections from third-party services such as analytics, ads, and external APIs." },
+                                        { step: "03", title: "Resolve & Visualize", desc: "These third-party domains are resolved to their organizations and countries using Geo-IP intelligence and displayed visually for user awareness." }
+                                    ].map((step, i) => (
+                                        <motion.div
+                                            key={i}
+                                            initial={{ opacity: 0, y: 20 }}
+                                            whileInView={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: i * 0.1 }}
+                                            className="bg-[#121212]/85 backdrop-blur-xl border border-white/5 rounded-2xl p-6 md:p-8 hover:translate-y-[-5px] hover:shadow-[0_20px_40px_rgba(0,242,255,0.1)] transition-all"
+                                        >
+                                            <span className="text-[#00f2ff] font-bold text-xs md:text-sm tracking-widest uppercase">Step {step.step}</span>
+                                            <h3 className="text-lg md:text-xl font-black mt-3 mb-3 md:mb-4 uppercase tracking-tight text-white">
+                                                {step.title}
+                                            </h3>
+                                            <p className="text-white/60 leading-relaxed text-sm md:text-base">
+                                                {step.desc}
+                                            </p>
+                                        </motion.div>
+                                    ))}
+                                </div>
+
+                                <p className="mt-8 md:mt-16 text-white/50 text-xs md:text-sm uppercase tracking-widest font-bold">
+                                    GeoFlow shows how data moves — without ever touching what the data is.
+                                </p>
+                            </div>
+                        </section>
+
+                        {/* Workflow Showcase */}
+                        <section className="py-24 px-6 relative z-20 overflow-hidden">
+                            <div className="max-w-6xl mx-auto">
+                                <div className="flex justify-center gap-6 mb-16">
+                                    {["globe", "shield", "zap", "server", "network"].map((iconName, i) => (
+                                        <div key={i} className={`w-14 h-14 rounded-full border border-white/5 flex items-center justify-center bg-[#121212]/50 backdrop-blur-xl transition-all duration-500 hover:scale-110 hover:border-[#00f2ff]/30 group`}>
+                                            <Icon name={iconName} className="w-6 h-6 text-white/40 group-hover:text-[#00f2ff] transition-colors" />
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="grid lg:grid-cols-2 gap-8 items-stretch">
+                                    {/* Left Panel */}
+                                    <motion.div 
+                                        initial={{ opacity: 0, x: -20 }}
+                                        whileInView={{ opacity: 1, x: 0 }}
+                                        className="bg-[#121212]/85 backdrop-blur-xl border border-white/5 rounded-[2.5rem] p-12 flex flex-col justify-between relative group"
+                                    >
+                                        <div className="absolute inset-0 bg-gradient-to-br from-[#00f2ff]/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 rounded-[2.5rem]" />
+                                        <div className="relative">
+                                            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#00f2ff]/10 border border-[#00f2ff]/20 text-[#00f2ff] text-[10px] font-black tracking-widest uppercase mb-8">
+                                                <div className="w-1.5 h-1.5 rounded-full bg-[#00f2ff] animate-pulse" /> Live Analysis
+                                            </div>
+                                            <h3 className="text-4xl md:text-5xl font-black text-white mb-6 uppercase tracking-tight leading-tight">
+                                                Passive Data <br /> Observability
+                                            </h3>
+                                            <p className="text-white/50 text-lg leading-relaxed mb-10 max-w-md">
+                                                Our workflow operates at the browser level, capturing metadata before encryption while respecting user privacy boundaries.
+                                            </p>
+                                            
+                                            <div className="flex gap-2 mb-12 max-w-xs">
+                                                {[1, 2, 3, 4].map((step) => (
+                                                    <div key={step} className={`h-1.5 flex-1 rounded-full transition-all duration-700 ${step === 1 ? 'bg-[#00f2ff] shadow-[0_0_10px_#00f2ff]' : 'bg-white/10'}`} />
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div className="relative flex items-center justify-between mt-auto pt-10 border-t border-white/5">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-[#00f2ff] to-[#0066ff] flex items-center justify-center font-black text-[#121212] text-sm shadow-lg shadow-[#00f2ff]/20">GF</div>
+                                                <div className="flex flex-col">
+                                                    <span className="text-white font-black text-xs uppercase tracking-tight">GeoFlow System</span>
+                                                    <span className="text-white/40 text-[10px] uppercase font-bold tracking-widest">Scanning Protocol v4.0</span>
+                                                </div>
+                                            </div>
+                                            <button className="w-14 h-14 rounded-full border border-white/10 flex items-center justify-center hover:bg-white/5 transition-all group">
+                                                <Icon name="chevron-right" className="w-6 h-6 text-white/50 group-hover:text-[#00f2ff] transition-colors" />
+                                            </button>
+                                        </div>
+                                    </motion.div>
+
+                                    {/* Right Panel - Terminal/Mock UI */}
+                                    <motion.div 
+                                        initial={{ opacity: 0, x: 20 }}
+                                        whileInView={{ opacity: 1, x: 0 }}
+                                        className="bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] overflow-hidden flex flex-col shadow-2xl shadow-[#00f2ff]/5 relative group"
+                                    >
+                                        <div className="absolute inset-0 bg-[#00f2ff]/5 opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
+                                        <div className="h-14 border-b border-white/5 px-8 flex items-center justify-between bg-white/[0.02] relative">
+                                            <div className="flex gap-2.5">
+                                                <div className="w-3.5 h-3.5 rounded-full bg-red-500/20 border border-red-500/30" />
+                                                <div className="w-3.5 h-3.5 rounded-full bg-amber-500/20 border border-amber-500/30" />
+                                                <div className="w-3.5 h-3.5 rounded-full bg-emerald-500/20 border border-emerald-500/30" />
+                                            </div>
+                                            <div className="px-4 py-1.5 rounded bg-white/5 text-[10px] font-mono text-white/40 uppercase tracking-widest border border-white/5">Network_Terminal.sh</div>
+                                        </div>
+                                        
+                                        <div className="p-10 font-mono text-xs md:text-sm space-y-6 relative flex-1 flex flex-col">
+                                            <div className="flex gap-4">
+                                                <span className="text-[#00f2ff] font-black">$</span>
+                                                <span className="text-white/80">initializing geo-flow observer...</span>
+                                            </div>
+                                            <div className="flex gap-4">
+                                                <span className="text-emerald-400 font-bold uppercase tracking-widest">DONE</span>
+                                                <span className="text-white/50">Listening on port 80/443 (TCP)</span>
+                                            </div>
+                                            <div className="space-y-3 mt-6">
+                                                {[
+                                                    { dest: "analytics.google.com", status: "200 OK", size: "12.4kb", time: "12ms" },
+                                                    { dest: "pixel.facebook.com", status: "101 UP", size: "0.8kb", time: "45ms" },
+                                                    { dest: "api.stripe.com", status: "200 OK", size: "45.2kb", time: "8ms" }
+                                                ].map((log, i) => (
+                                                    <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-white/[0.03] border border-white/5 hover:border-[#00f2ff]/20 transition-colors">
+                                                        <div className="flex items-center gap-4">
+                                                            <div className="w-2.5 h-2.5 rounded-full bg-[#00f2ff] shadow-[0_0_12px_#00f2ff]" />
+                                                            <span className="text-white font-medium">{log.dest}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-6">
+                                                            <span className="text-white/30 text-[10px] font-bold">{log.time}</span>
+                                                            <span className="text-[#00f2ff]/50 text-[10px] font-black uppercase tracking-widest">{log.status}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <div className="mt-auto pt-10 border-t border-white/5">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="space-y-1">
+                                                        <span className="block text-white font-black text-xs uppercase tracking-tighter">GLOBAL RESOLVER</span>
+                                                        <div className="flex items-center gap-2">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                                            <span className="text-white/40 text-[10px] font-bold uppercase tracking-widest">99.9% System Uptime</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="w-16 h-16 rounded-full border-2 border-[#00f2ff]/20 flex items-center justify-center relative">
+                                                        <div className="absolute inset-[-4px] rounded-full border-2 border-t-[#00f2ff] animate-spin" />
+                                                        <Icon name="activity" className="w-7 h-7 text-[#00f2ff] drop-shadow-[0_0_8px_#00f2ff]" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* Technical Architecture Section */}
+                        <section className="py-20 px-6 relative z-20">
+                            <div className="max-w-7xl mx-auto text-center">
+                                <h2 className="text-3xl md:text-4xl lg:text-5xl font-black mb-12 md:mb-20 uppercase tracking-tight text-white">Technical Architecture</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8 text-left">
+                                    {[
+                                        { icon: "shield", title: "Browser Extension", list: ["Manifest V3 Security", "chrome.webRequest analysis", "Domain metadata extraction", "Real-time visualization"], color: "text-[#00f2ff]" },
+                                        { icon: "zap", title: "Backend API", list: ["Python / Django Core", "Geo-IP Intelligence", "Domain-Org Mapping", "Low-latency resolution"], color: "text-gray-400" },
+                                        { icon: "bar-chart-3", title: "Intelligence Layer", list: ["Cross-site visibility detection", "Frequency pattern analysis", "Transparent reporting", "Data flow caching"], color: "text-amber-400" }
+                                    ].map((card, i) => (
+                                        <motion.div
+                                            key={i}
+                                            initial={{ opacity: 0, scale: 0.95 }}
+                                            whileInView={{ opacity: 1, scale: 1 }}
+                                            transition={{ delay: i * 0.1 }}
+                                            className="bg-[#121212]/85 backdrop-blur-xl border border-white/5 rounded-2xl p-6 md:p-10 hover:translate-y-[-5px] hover:shadow-[0_20px_40px_rgba(0,242,255,0.1)] transition-all"
+                                        >
+                                            <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center mb-6">
+                                                <Icon name={card.icon} className={`w-6 h-6 ${card.color}`} />
+                                            </div>
+                                            <h3 className="text-xl md:text-2xl font-black mb-6 text-white uppercase tracking-tight">{card.title}</h3>
+                                            <ul className="space-y-3 md:space-y-4 mb-8 text-white/60">
+                                                {card.list.map((item, j) => (
+                                                    <li key={j} className="flex items-center gap-3">
+                                                        <div className="w-1.5 h-1.5 rounded-full bg-[#00f2ff]" /> {item}
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                            <button className="text-white font-bold hover:text-[#00f2ff] flex items-center gap-1 uppercase text-xs transition-all duration-300 tracking-wider">
+                                                View Source <Icon name="chevron-right" className="w-4 h-4" />
+                                            </button>
+                                        </motion.div>
+                                    ))}
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* Live Network Table */}
+                        <section className="py-20 px-6 relative z-20">
+                            <div className="max-w-7xl mx-auto">
+                                <div className="flex flex-col md:flex-row items-start md:items-end justify-between mb-8 md:mb-12 gap-6 md:gap-8">
+                                    <div>
+                                        <h2 className="text-3xl md:text-4xl lg:text-5xl font-black mb-4 uppercase tracking-tight text-white">Live Network Destinations</h2>
+                                        <p className="text-white/50 text-base md:text-lg">Observed destination domains resolved through GeoFlow Intelligence.</p>
+                                    </div>
+                                    <div className="flex gap-3 md:gap-4">
+                                        {[
+                                            { label: "Domains Found", val: "1,284", color: "text-[#00f2ff]" },
+                                            { label: "Orgs Identified", val: "84", color: "text-gray-400" },
+                                            { label: "Countries", val: "12", color: "text-white" }
+                                        ].map((stat, i) => (
+                                            <div key={i} className="bg-[#121212]/85 backdrop-blur-xl border border-white/5 rounded-xl md:rounded-2xl p-4 md:p-6 text-center min-w-[100px] md:min-w-[140px]">
+                                                <span className={`block text-2xl md:text-3xl font-black ${stat.color}`}>{stat.val}</span>
+                                                <label className="text-[10px] text-white/50 uppercase tracking-widest font-black">{stat.label}</label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="bg-[#121212]/85 backdrop-blur-xl border border-white/5 rounded-2xl md:rounded-3xl overflow-hidden">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full text-left text-sm">
+                                            <thead>
+                                                <tr className="bg-white/5">
+                                                    <th className="p-4 md:p-6 font-black uppercase tracking-widest text-white/50 text-[10px]">Domain</th>
+                                                    <th className="p-4 md:p-6 font-black uppercase tracking-widest text-white/50 text-[10px]">Category</th>
+                                                    <th className="p-4 md:p-6 font-black uppercase tracking-widest text-white/50 text-[10px]">Location</th>
+                                                    <th className="p-4 md:p-6 font-black uppercase tracking-widest text-white/50 text-[10px]">Organization</th>
+                                                    <th className="p-4 md:p-6 font-black uppercase tracking-widest text-white/50 text-[10px]">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-white/5">
+                                                {[
+                                                    { domain: "google-analytics.com", cat: "Tracking", loc: "USA", org: "Google LLC", catCol: "text-[#00f2ff] bg-[#00f2ff]/10" },
+                                                    { domain: "facebook.net", cat: "Pixel", loc: "Ireland", org: "Meta Platforms", catCol: "text-purple-400 bg-purple-500/10" },
+                                                    { domain: "doubleclick.net", cat: "Ad Serving", loc: "USA", org: "Google LLC", catCol: "text-amber-400 bg-amber-500/10" },
+                                                    { domain: "hotjar.com", cat: "Recording", loc: "Malta", org: "Hotjar Ltd", catCol: "text-emerald-400 bg-emerald-500/10" }
+                                                ].map((row, i) => (
+                                                    <tr key={i} className="hover:bg-white/5 transition-colors duration-300">
+                                                        <td className="p-4 md:p-6 font-bold text-white uppercase tracking-tight">{row.domain}</td>
+                                                        <td className="p-4 md:p-6">
+                                                            <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${row.catCol}`}>
+                                                                {row.cat}
+                                                            </span>
+                                                        </td>
+                                                        <td className="p-4 md:p-6 text-white/60 font-medium uppercase tracking-wider">{row.loc}</td>
+                                                        <td className="p-4 md:p-6 text-white/60 font-medium uppercase tracking-wider">{row.org}</td>
+                                                        <td className="p-4 md:p-6 text-white/50 text-[10px] flex items-center gap-2 font-black uppercase tracking-widest">
+                                                            <div className="w-2 h-2 rounded-full bg-[#00f2ff] shadow-[0_0_10px_rgba(0,242,255,0.8)]" /> Observed
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    <div className="p-4 md:p-6 bg-white/5 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                                        <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Observing network traffic via Manifest V3 chrome.webRequest API</p>
+                                        <button className="border border-white/10 hover:bg-white/10 backdrop-blur-sm px-4 py-2 rounded-lg transition-all duration-300 flex items-center gap-2 text-xs uppercase font-black tracking-widest hover:text-[#00f2ff] text-white">
+                                            <Icon name="file-text" className="w-4 h-4" /> Download Intelligence Report
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* FAQ Section */}
+                        <section className="py-20 px-6 relative z-20">
+                            <div className="max-w-3xl mx-auto">
+                                <h2 className="text-3xl md:text-4xl font-black text-center mb-12 uppercase tracking-tight text-white">
+                                    Frequently Asked Questions
+                                </h2>
+
+                                <div className="space-y-6">
+                                    {[
+                                        { q: "What exactly is GeoFlow?", a: "GeoFlow is a browser extension that shows where your web data goes geographically when you browse a website. It visualizes network connections — not content. Think data flow transparency, not surveillance or blocking." },
+                                        { q: "What problem does GeoFlow solve?", a: "A single website no longer talks to just one server. Each page load silently triggers dozens of third-party connections — ads, analytics, trackers, and CDNs — often across multiple countries. Users have zero visibility into this. GeoFlow closes this awareness gap." },
+                                        { q: "Does GeoFlow track or read user data?", a: "No. Period. We do not read form inputs, cookies, payloads, or page content. We only observe destination domains of network requests to map infrastructure movement." },
+                                        { q: "How do I install the observer?", a: "Simply visit the Chrome Web Store, search for GeoFlow, and click 'Add to Chrome'. The extension will begin mapping your data flows immediately." },
+                                        { q: "Is GeoFlow open source?", a: "Yes, we believe transparency is the foundation of trust. Our entire codebase is available on GitHub for community auditing and contributions." },
+                                        { q: "Which browsers are supported?", a: "GeoFlow currently supports all Chromium-based browsers including Chrome, Edge, and Brave that support Manifest V3." },
+                                        { q: "Can it handle encrypted traffic?", a: "Yes. While we cannot read the encrypted content (and don't want to), we observe the destination domains via SNI to identify the infrastructure involved." },
+                                        { q: "Does it impact browser speed?", a: "No. Our observation technique is passive and lightweight. It runs alongside your requests without adding any measurable latency to your browsing." },
+                                        { q: "Can I use it for enterprise auditing?", a: "Absolutely. We offer specialized tools for security teams to visualize third-party risk across entire organizational networks." },
+                                        { q: "How can I contribute?", a: "We welcome developers, designers, and researchers. Visit our GitHub repository to find open issues, feature requests, and contribution guidelines." }
+                                    ].map((faq, i) => (
+                                        <details key={i} className="group border-b border-white/10 pb-6">
+                                            <summary className="flex justify-between items-center cursor-pointer list-none py-4 text-lg md:text-xl font-black tracking-tight text-white hover:text-[#00f2ff] transition-all uppercase">
+                                                {faq.q}
+                                                <Icon name="chevron-down" className="group-open:rotate-180 transition-transform duration-500 text-[#00f2ff]" />
+                                            </summary>
+                                            <div className="text-white/60 leading-relaxed text-base md:text-lg pt-2 font-medium">
+                                                {faq.a}
+                                            </div>
+                                        </details>
+                                    ))}
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* Get in Touch Section */}
+                        <section className="py-24 px-6 relative z-20">
+                            <div className="max-w-6xl mx-auto">
+                                <div className="text-center mb-20">
+                                    <h2 className="text-5xl md:text-7xl font-black text-white mb-6 uppercase tracking-tight">
+                                        Get in <span className="bg-gradient-to-r from-[#00f2ff] to-[#0099ff] bg-clip-text text-transparent drop-shadow-[0_0_20px_rgba(0,242,255,0.3)]">Touch</span>
+                                    </h2>
+                                    <p className="text-white/40 text-lg md:text-xl font-black uppercase tracking-[0.2em]">
+                                        Have questions or feedback? We'd love to hear from you
+                                    </p>
+                                </div>
+
+                                <div className="grid lg:grid-cols-5 gap-16 md:gap-24">
+                                    {/* Contact Form */}
+                                    <div className="lg:col-span-3 space-y-10">
+                                        <h3 className="text-2xl font-black text-white uppercase tracking-tight">Send us a Message</h3>
+                                        <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
+                                            <div className="grid md:grid-cols-2 gap-6">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-white/40 uppercase tracking-widest ml-1">Name</label>
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="Your name" 
+                                                        className="w-full h-16 bg-[#121212]/50 border border-white/10 rounded-2xl px-8 text-white focus:outline-none focus:border-[#00f2ff]/50 transition-all placeholder:text-white/20 font-medium"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-white/40 uppercase tracking-widest ml-1">Email</label>
+                                                    <input 
+                                                        type="email" 
+                                                        placeholder="your@email.com" 
+                                                        className="w-full h-16 bg-[#121212]/50 border border-white/10 rounded-2xl px-8 text-white focus:outline-none focus:border-[#00f2ff]/50 transition-all placeholder:text-white/20 font-medium"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <label className="text-[10px] font-black text-white/40 uppercase tracking-widest ml-1">Message</label>
+                                                <textarea 
+                                                    placeholder="Tell us what's on your mind..." 
+                                                    rows={6}
+                                                    className="w-full bg-[#121212]/50 border border-white/10 rounded-2xl px-8 py-6 text-white focus:outline-none focus:border-[#00f2ff]/50 transition-all placeholder:text-white/20 resize-none font-medium"
+                                                ></textarea>
+                                            </div>
+                                            <button className="w-full h-16 rounded-full bg-gradient-to-r from-[#00f2ff] to-[#0066ff] text-[#121212] font-black uppercase tracking-widest flex items-center justify-center gap-4 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-2xl shadow-[#00f2ff]/20">
+                                                <Icon name="send-horizontal" className="w-5 h-5" /> Send Message
+                                            </button>
+                                        </form>
+                                    </div>
+
+                                    {/* Other Ways */}
+                                    <div className="lg:col-span-2 space-y-10">
+                                        <h3 className="text-2xl font-black text-white uppercase tracking-tight">Other Ways to Connect</h3>
+                                        <p className="text-white/40 text-sm font-black uppercase tracking-widest leading-relaxed">Prefer a different way to get in touch? <br />Choose what works best for you.</p>
+                                        
+                                        <div className="space-y-4">
+                                            <a href="mailto:cktechhuborg@gmail.com" className="bg-[#121212]/50 border border-white/10 rounded-3xl p-8 flex items-center gap-8 group hover:border-[#00f2ff]/30 transition-all">
+                                                <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center text-[#00f2ff] group-hover:bg-[#00f2ff]/10 transition-all shadow-inner">
+                                                    <Icon name="mail" className="w-7 h-7" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-white font-black text-xs uppercase tracking-widest mb-1">Email</h4>
+                                                    <span className="text-white/50 font-bold tracking-tight">cktechhuborg@gmail.com</span>
+                                                </div>
+                                            </a>
+
+                                            <a href="#" className="bg-[#121212]/50 border border-white/10 rounded-3xl p-8 flex items-center gap-8 group hover:border-[#00f2ff]/30 transition-all">
+                                                <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center text-[#00f2ff] group-hover:bg-[#00f2ff]/10 transition-all shadow-inner">
+                                                    <Icon name="message-square" className="w-7 h-7" />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-white font-black text-xs uppercase tracking-widest mb-1">Telegram</h4>
+                                                    <span className="text-white/50 font-bold tracking-tight">Join Community</span>
+                                                </div>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
+                        {/* Final CTA */}
+                        <section className="py-20 md:py-40 px-6 text-center relative z-20">
+                            <motion.div 
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                whileInView={{ opacity: 1, scale: 1 }}
+                                className="max-w-4xl mx-auto"
+                            >
+                                <h2 className="text-4xl md:text-6xl lg:text-7xl font-black mb-6 md:mb-8 leading-tight uppercase tracking-tight text-white">
+                                    AWARENESS IS THE FIRST STEP TO <span className="bg-gradient-to-r from-[#00f2ff] via-[#0099ff] to-[#0066ff] bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(0,242,255,0.5)]">PRIVACY.</span>
+                                </h2>
+                                <p className="text-lg md:text-xl text-white/40 mb-8 md:mb-12 uppercase tracking-widest font-black">
+                                    Join the movement for transparent web infrastructure.
+                                </p>
+                                <button className="h-14 md:h-16 px-8 md:px-12 rounded-full bg-[#00f2ff] text-[#121212] text-base md:text-lg font-black hover:scale-105 transition-all duration-300 shadow-xl shadow-[#00f2ff]/30 hover:shadow-2xl hover:shadow-[#00f2ff]/40 uppercase tracking-tighter">
+                                    Become a Contributor
+                                </button>
+                            </motion.div>
+                        </section>
+                    </main>
+
+                    {/* Footer */}
+                    <footer className="bg-[#0a0a0a] py-12 md:py-24 px-6 border-t border-white/5 relative z-20">
+                        <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4 lg:col-span-5 gap-8 md:gap-12">
+                            <div className="col-span-2 lg:col-span-1">
+                                <div className="flex items-center gap-2 mb-6">
+                                    <div className="w-8 h-8 bg-[#00f2ff] rounded-lg flex items-center justify-center">
+                                        <Icon name="globe" className="text-[#121212] w-4 h-4" />
+                                    </div>
+                                    <span className="text-xl font-black text-white tracking-tight uppercase">Geo Flow</span>
+                                </div>
+                                <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest leading-relaxed">
+                                    Visualizing Where Your Data Actually Goes. <br /> © 2025 GeoFlow Project.
+                                </p>
+                            </div>
+                            
+                            <div>
+                                <h4 className="text-white font-black mb-4 text-[10px] uppercase tracking-widest">Observability</h4>
+                                <ul className="space-y-2 md:space-y-4 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                                    <li><a href="#" className="hover:text-[#00f2ff] transition-colors">Extension</a></li>
+                                    <li><a href="#" className="hover:text-[#00f2ff] transition-colors">Backend API</a></li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 className="text-white font-black mb-4 text-[10px] uppercase tracking-widest">Stack</h4>
+                                <ul className="space-y-2 md:space-y-4 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                                    <li><a href="#" className="hover:text-[#00f2ff] transition-colors">Manifest V3</a></li>
+                                    <li><a href="#" className="hover:text-[#00f2ff] transition-colors">Python/Django</a></li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 className="text-white font-black mb-4 text-[10px] uppercase tracking-widest">Project</h4>
+                                <ul className="space-y-2 md:space-y-4 text-[10px] font-bold uppercase tracking-widest text-white/40">
+                                    <li><a href="#" className="hover:text-[#00f2ff] transition-colors">FAQ</a></li>
+                                    <li><a href="#" className="hover:text-[#00f2ff] transition-colors">GitHub</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </footer>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
